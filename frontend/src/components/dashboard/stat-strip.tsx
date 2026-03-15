@@ -83,8 +83,8 @@ export function StatStrip({ data }: StatStripProps) {
               ? data.transactionsToday.toLocaleString()
               : "\u2014",
         },
-        { label: "Avg TPS (24H)", value: data.tps.toFixed(2) },
-        { label: "Peak TPS (24H)", align: "right" as const, value: data.peakTps.toFixed(2) },
+        { label: "Avg TPS (24H)", value: data.tps < 1 ? data.tps.toFixed(3) : data.tps.toFixed(2) },
+        { label: "Peak TPS (24H)", align: "right" as const, value: data.peakTps < 1 ? data.peakTps.toFixed(3) : data.peakTps.toFixed(2) },
       ],
     },
     // ── Card 2: Block & Gas ──

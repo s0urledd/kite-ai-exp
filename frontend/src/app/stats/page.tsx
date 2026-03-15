@@ -343,8 +343,8 @@ export default function StatsPage() {
           <div className="space-y-3.5">
             {[
               { label: "Avg Block Time", value: `${(stats.average_block_time / 1000).toFixed(1)}s`, color: "text-kite-text" },
-              { label: "Current TPS", value: chainData.tps.toFixed(2), color: "text-kite-text" },
-              { label: "Peak TPS", value: chainData.peakTps.toFixed(2), color: "text-kite-text" },
+              { label: "Current TPS", value: chainData.tps < 1 ? chainData.tps.toFixed(3) : chainData.tps.toFixed(2), color: "text-kite-text" },
+              { label: "Peak TPS", value: chainData.peakTps < 1 ? chainData.peakTps.toFixed(3) : chainData.peakTps.toFixed(2), color: "text-kite-text" },
               { label: "Total Gas Used", value: formatNumber(stats.total_gas_used, true), color: "text-kite-text" },
               { label: "Gas Used Today", value: formatNumber(stats.gas_used_today, true), color: "text-kite-text" },
               { label: "Transactions Today", value: formatNumber(stats.transactions_today), color: "text-kite-text" },

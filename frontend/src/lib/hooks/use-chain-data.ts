@@ -124,7 +124,30 @@ async function fetchLatestStatValue(endpoint: string): Promise<number> {
 //   4. New blocks arrive (10s poll) → add their tx_count immediately.
 
 const TX24H_KEY = "kite_tx24h_v2";
+const ADDR_TRACK_KEY = "kite_addr_track";
 const FULL_RECALC_INTERVAL = 600_000; // 10 minutes
+
+// ── Address tracking for 24H new addresses fallback ──
+interface AddrTrackState {
+  totalAt: number; // total_addresses at snapshot time
+  snapshotAt: number; // timestamp of snapshot
+}
+
+function loadAddrTrack(): AddrTrackState | null {
+  try {
+    const raw = localStorage.getItem(ADDR_TRACK_KEY);
+    if (!raw) return null;
+    return JSON.parse(raw) as AddrTrackState;
+  } catch {
+    return null;
+  }
+}
+
+function saveAddrTrack(state: AddrTrackState) {
+  try {
+    localStorage.setItem(ADDR_TRACK_KEY, JSON.stringify(state));
+  } catch {}
+}
 
 interface Tx24hState {
   count: number;
@@ -346,8 +369,29 @@ export function useChainData(pollInterval = 10000) {
     const now = Date.now();
     if (now - slowCache.current.lastFetch > 60000) {
       const newAccounts = await fetchLatestStatValue("newAccounts");
+
+      // 24H new addresses: try stats microservice first, then localStorage diff
+      let newAddr24h = newAccounts;
+      if (newAddr24h <= 0) {
+        const currentTotal = counters && counters.totalAddresses > 0
+          ? counters.totalAddresses
+          : stats ? parseInt(stats.total_addresses || "0") : 0;
+
+        if (currentTotal > 0) {
+          const saved = loadAddrTrack();
+          if (saved && now - saved.snapshotAt < 86400_000) {
+            // Diff from snapshot taken within 24h
+            newAddr24h = Math.max(0, currentTotal - saved.totalAt);
+          } else {
+            // No valid snapshot — save current as baseline
+            saveAddrTrack({ totalAt: currentTotal, snapshotAt: now });
+            newAddr24h = 0;
+          }
+        }
+      }
+
       slowCache.current = {
-        newAddresses24h: newAccounts > 0 ? newAccounts : slowCache.current.newAddresses24h,
+        newAddresses24h: newAddr24h > 0 ? newAddr24h : slowCache.current.newAddresses24h,
         newContracts24h: counters ? counters.lastNewContracts : slowCache.current.newContracts24h,
         totalContracts: counters ? counters.totalContracts : slowCache.current.totalContracts,
         lastFetch: now,
