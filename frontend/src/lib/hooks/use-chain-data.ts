@@ -157,32 +157,36 @@ function loadTx24hState(): Tx24hState | null {
  * summing tx_count until we pass the 24H boundary.
  */
 async function fullCount24hTx(): Promise<{ count: number; newestBlock: number }> {
-  const cutoffSec = Math.floor(Date.now() / 1000) - 86400;
-  let total = 0;
-  let newestBlock = 0;
-  let params: Record<string, string> = { type: "block" };
+  try {
+    const cutoffSec = Math.floor(Date.now() / 1000) - 86400;
+    let total = 0;
+    let newestBlock = 0;
+    let params: Record<string, string> = { type: "block" };
 
-  for (let page = 0; page < 25; page++) {
-    const data = await blockscout.getBlocks(params);
-    const blocks = data.items || [];
-    if (blocks.length === 0) break;
+    for (let page = 0; page < 25; page++) {
+      const data = await blockscout.getBlocks(params);
+      const blocks = data.items || [];
+      if (blocks.length === 0) break;
 
-    for (const block of blocks) {
-      if (page === 0 && newestBlock === 0) newestBlock = block.height;
-      const blockTimeSec = new Date(block.timestamp).getTime() / 1000;
-      if (blockTimeSec < cutoffSec) {
-        return { count: total, newestBlock };
+      for (const block of blocks) {
+        if (page === 0 && newestBlock === 0) newestBlock = block.height;
+        const blockTimeSec = new Date(block.timestamp).getTime() / 1000;
+        if (blockTimeSec < cutoffSec) {
+          return { count: total, newestBlock };
+        }
+        total += block.tx_count || 0;
       }
-      total += block.tx_count || 0;
+
+      if (!data.next_page_params) break;
+      params = Object.fromEntries(
+        Object.entries(data.next_page_params).map(([k, v]) => [k, String(v)])
+      );
     }
 
-    if (!data.next_page_params) break;
-    params = Object.fromEntries(
-      Object.entries(data.next_page_params).map(([k, v]) => [k, String(v)])
-    );
+    return { count: total, newestBlock };
+  } catch {
+    return { count: 0, newestBlock: 0 };
   }
-
-  return { count: total, newestBlock };
 }
 
 /**
@@ -345,8 +349,10 @@ export function useChainData(pollInterval = 10000) {
     // ══════════════════════════════════════════════════
     const needsFullRecalc = now - tx24h.current.calculatedAt > FULL_RECALC_INTERVAL;
 
+    // Fallback base from stats microservice (always available)
+    const fallbackTx24h = counters ? counters.newTxns24h : 0;
+
     if (!tx24hInitialized.current) {
-      // First poll after mount: try localStorage
       tx24hInitialized.current = true;
       const saved = loadTx24hState();
 
@@ -360,24 +366,25 @@ export function useChainData(pollInterval = 10000) {
         };
         saveTx24hState(tx24h.current);
       } else {
-        // No saved state — full calculation
+        // No saved state — full calculation from blocks
         const result = await fullCount24hTx();
+        const count = result.count > 0 ? result.count : fallbackTx24h;
         tx24h.current = {
-          count: result.count,
+          count,
           lastBlock: result.newestBlock || bn,
           calculatedAt: now,
         };
-        saveTx24hState(tx24h.current);
+        if (count > 0) saveTx24hState(tx24h.current);
       }
     } else if (needsFullRecalc) {
-      // Periodic full recalc to correct 24H sliding window drift
       const result = await fullCount24hTx();
+      const count = result.count > 0 ? result.count : fallbackTx24h;
       tx24h.current = {
-        count: result.count,
+        count,
         lastBlock: result.newestBlock || bn,
         calculatedAt: now,
       };
-      saveTx24hState(tx24h.current);
+      if (count > 0) saveTx24hState(tx24h.current);
     } else if (bn > tx24h.current.lastBlock) {
       // Normal poll: add TXs from new blocks via RPC data we already have
       for (const b of bks) {
