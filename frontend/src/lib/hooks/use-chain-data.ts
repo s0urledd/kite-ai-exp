@@ -174,7 +174,7 @@ async function fullCount24hTx(): Promise<{ count: number; newestBlock: number }>
         if (blockTimeSec < cutoffSec) {
           return { count: total, newestBlock };
         }
-        total += block.tx_count || 0;
+        total += (block as any).transaction_count || block.tx_count || 0;
       }
 
       if (!data.next_page_params) break;
@@ -210,7 +210,7 @@ async function incrementalCount(lastBlock: number, currentBlock: number): Promis
         reachedLastBlock = true;
         break;
       }
-      added += block.tx_count || 0;
+      added += (block as any).transaction_count || block.tx_count || 0;
     }
 
     if (reachedLastBlock) break;
