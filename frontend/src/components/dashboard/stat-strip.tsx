@@ -178,7 +178,7 @@ export function StatStrip({ data }: StatStripProps) {
           value: <AnimatedNumber value={data.addressCount} />,
         },
         {
-          label: "New Addresses (24H)",
+          label: "24H New Addresses",
           align: "right" as const,
           value: data.newAddresses24h > 0 ? data.newAddresses24h.toLocaleString() : "\u2014",
         },
