@@ -97,6 +97,53 @@ async function fetchStatsCounters(): Promise<StatsCounters | null> {
 }
 
 /**
+ * Calculate a rolling 24H transaction count.
+ *
+ * Blockscout's `transactions_today` only counts from midnight UTC — NOT a rolling 24H window.
+ * If it's 3 AM UTC, that's only 3 hours of data, not 24H.
+ *
+ * This function combines:
+ * 1. `transactions_today` (midnight UTC → now)
+ * 2. Yesterday's TX count from /stats/charts/transactions (proportional to remaining hours)
+ *
+ * Result ≈ true rolling 24H TX count.
+ */
+async function calculateRolling24hTx(todayFromStats: number): Promise<number> {
+  const now = new Date();
+  const hoursSinceMidnightUTC = now.getUTCHours() + now.getUTCMinutes() / 60;
+  const remainingHours = 24 - hoursSinceMidnightUTC;
+
+  // If we're very close to midnight, transactions_today is basically 24H already
+  if (remainingHours < 0.5) return todayFromStats;
+
+  try {
+    const chartData = await blockscout.getTransactionCharts();
+    const chart = chartData?.chart_data;
+    if (!Array.isArray(chart) || chart.length < 2) return todayFromStats;
+
+    // Get yesterday's total TX count (second-to-last entry, or last if today not in chart)
+    // Chart entries: [{date: "2026-03-14", tx_count: 500}, {date: "2026-03-15", tx_count: 200}]
+    const todayStr = now.toISOString().slice(0, 10);
+    let yesterdayTxCount = 0;
+
+    for (let i = chart.length - 1; i >= 0; i--) {
+      if (chart[i].date !== todayStr) {
+        yesterdayTxCount = chart[i].tx_count ?? chart[i].transaction_count ?? 0;
+        break;
+      }
+    }
+
+    if (yesterdayTxCount <= 0) return todayFromStats;
+
+    // Proportional share of yesterday's TX for the remaining hours
+    const yesterdayShare = Math.round(yesterdayTxCount * (remainingHours / 24));
+    return todayFromStats + yesterdayShare;
+  } catch {
+    return todayFromStats;
+  }
+}
+
+/**
  * Fetch the latest value from a stats-microservice line chart.
  * Returns the most recent day's value, or 0 on failure.
  */
@@ -251,11 +298,24 @@ export function useChainData(pollInterval = 10000) {
       };
     }
 
-    // ── 24H Transactions ──
-    // Priority: stats-microservice newTxns24h (true rolling 24H) > Blockscout transactions_today (from midnight UTC)
-    const rolling24hTx = counters ? counters.newTxns24h : 0;
+    // ── 24H Transactions (Rolling 24H window) ──
+    // Priority:
+    //   1. Stats-microservice newTxns24h (true rolling 24H if available)
+    //   2. Rolling calc: Blockscout transactions_today + proportional yesterday from chart data
+    //   3. Raw Blockscout transactions_today (midnight UTC, worst case)
+    const microserviceTx24h = counters ? counters.newTxns24h : 0;
     const blockscoutTx24h = stats?.transactions_today ? parseInt(stats.transactions_today) : 0;
-    const baseTx24h = rolling24hTx > 0 ? rolling24hTx : blockscoutTx24h;
+
+    let baseTx24h: number;
+    if (microserviceTx24h > 0) {
+      // Stats microservice has true rolling 24H — use it directly
+      baseTx24h = microserviceTx24h;
+    } else if (blockscoutTx24h > 0) {
+      // Calculate rolling 24H from chart data + today's count
+      baseTx24h = await calculateRolling24hTx(blockscoutTx24h);
+    } else {
+      baseTx24h = 0;
+    }
 
     // Track TX delta for real-time updates between API polls
     if (baseTx24h !== txTracker.current.lastSourceValue && baseTx24h > 0) {
@@ -280,7 +340,7 @@ export function useChainData(pollInterval = 10000) {
         ? parseInt(stats.total_addresses || "0")
         : addrs.current.size;
 
-    // ── Avg TPS ──
+    // ── Avg TPS (based on rolling 24H TX count / 86400 seconds) ──
     const avgTps = transactionsToday > 0 ? transactionsToday / 86400 : instantTps;
 
     setData({
