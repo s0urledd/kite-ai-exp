@@ -1,0 +1,101 @@
+version: '3.9'
+
+services:
+  db:
+    image: postgres:14
+    restart: unless-stopped
+    container_name: kite-explorer-db
+    environment:
+      POSTGRES_DB: blockscout
+      POSTGRES_USER: blockscout
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-kiteExplorer2024}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    ports:
+      - "7432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U blockscout"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis-db:
+    image: redis:7-alpine
+    restart: unless-stopped
+    container_name: kite-explorer-redis
+    ports:
+      - "6379:6379"
+
+  backend:
+    image: blockscout/blockscout:latest
+    restart: unless-stopped
+    container_name: kite-explorer-backend
+    depends_on:
+      db:
+        condition: service_healthy
+      redis-db:
+        condition: service_started
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    env_file:
+      - ./envs/common-blockscout.env
+    ports:
+      - "4000:4000"
+    command: sh -c "bin/blockscout eval \"Elixir.Explorer.ReleaseTasks.create_and_migrate()\" && bin/blockscout start"
+
+  sig-provider:
+    image: ghcr.io/blockscout/sig-provider:latest
+    restart: unless-stopped
+    container_name: kite-explorer-sig-provider
+    ports:
+      - "8151:8050"
+
+  smart-contract-verifier:
+    image: ghcr.io/blockscout/smart-contract-verifier:latest
+    restart: unless-stopped
+    container_name: kite-explorer-sc-verifier
+    ports:
+      - "8150:8050"
+
+  visualizer:
+    image: ghcr.io/blockscout/visualizer:latest
+    restart: unless-stopped
+    container_name: kite-explorer-visualizer
+    ports:
+      - "8152:8050"
+
+  stats-db:
+    image: postgres:14
+    restart: unless-stopped
+    container_name: kite-explorer-stats-db
+    environment:
+      POSTGRES_DB: stats
+      POSTGRES_USER: stats
+      POSTGRES_PASSWORD: ${STATS_DB_PASSWORD:-kiteStats2024}
+    volumes:
+      - stats-postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U stats"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  stats:
+    image: ghcr.io/blockscout/stats:latest
+    restart: unless-stopped
+    container_name: kite-explorer-stats
+    depends_on:
+      stats-db:
+        condition: service_healthy
+      backend:
+        condition: service_started
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    env_file:
+      - ./envs/common-stats.env
+    ports:
+      - "8153:8050"
+
+volumes:
+  postgres-data:
+  stats-postgres-data:

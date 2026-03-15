@@ -1,0 +1,63 @@
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Outfit:wght@300;400;500;600;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  /* Dark theme (default) */
+  :root,
+  .dark {
+    --kite-gold: #C4A96A;
+    --kite-gold-light: #DBC993;
+    --kite-gold-dim: #8B7A4E;
+    --kite-gold-faint: rgba(196, 169, 106, 0.07);
+    --kite-bg: #09090B;
+    --kite-surface: #111113;
+    --kite-surface-hover: #19180F;
+    --kite-border: transparent;
+    --kite-border-light: transparent;
+    --kite-text: #F5F0E8;
+    --kite-text-secondary: #D8D3CB;
+    --kite-text-muted: #5C574E;
+
+    /* Card accent colors */
+    --kite-accent-gold: #C4A96A;
+    --kite-accent-teal: #5BA3A8;
+    --kite-accent-emerald: #5BAA7C;
+    --kite-accent-lavender: #A87BC4;
+  }
+
+  /* Light theme */
+  .light {
+    --kite-gold: #9A7B3C;
+    --kite-gold-light: #7A6230;
+    --kite-gold-dim: #B09050;
+    --kite-gold-faint: rgba(154, 123, 60, 0.08);
+    --kite-bg: #FAFAF9;
+    --kite-surface: #FFFFFF;
+    --kite-surface-hover: #F5F4F0;
+    --kite-border: #E5E2DC;
+    --kite-border-light: #D5D0C8;
+    --kite-text: #1A1A1A;
+    --kite-text-secondary: #5C574E;
+    --kite-text-muted: #9B9488;
+  }
+
+  body {
+    background-color: var(--kite-bg);
+    color: var(--kite-text);
+    @apply font-sans antialiased;
+  }
+
+  ::-webkit-scrollbar {
+    width: 4px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background-color: #1E1D18;
+    border-radius: 9999px;
+  }
+}
