@@ -164,6 +164,29 @@ async function fetchLatestStatValue(endpoint: string): Promise<number> {
   }
 }
 
+// ── Persist 24H TX count across page reloads ──
+const TX24H_STORAGE_KEY = "kite_tx24h";
+const TX24H_TTL = 120_000; // 2 minutes
+
+function saveTx24h(value: number) {
+  try {
+    sessionStorage.setItem(TX24H_STORAGE_KEY, JSON.stringify({ v: value, t: Date.now() }));
+  } catch {}
+}
+
+function loadTx24h(): number {
+  try {
+    const raw = sessionStorage.getItem(TX24H_STORAGE_KEY);
+    if (!raw) return 0;
+    const { v, t } = JSON.parse(raw);
+    // Only use if saved within last 2 minutes
+    if (Date.now() - t > TX24H_TTL) return 0;
+    return v || 0;
+  } catch {
+    return 0;
+  }
+}
+
 export function useChainData(pollInterval = 10000) {
   const [data, setData] = useState<ChainData>(INITIAL);
   const addrs = useRef(new Set<string>());
@@ -331,7 +354,12 @@ export function useChainData(pollInterval = 10000) {
       txTracker.current.lastSeenBlock = bn;
     }
 
-    const transactionsToday = (baseTx24h > 0 ? baseTx24h : 0) + txTracker.current.txDelta;
+    const computedTx24h = (baseTx24h > 0 ? baseTx24h : 0) + txTracker.current.txDelta;
+    // Use max of computed value and last saved value (survives F5)
+    const savedTx24h = loadTx24h();
+    const transactionsToday = Math.max(computedTx24h, savedTx24h);
+    // Persist for next page load
+    if (transactionsToday > 0) saveTx24h(transactionsToday);
 
     // ── Address count: counters > Blockscout stats > local tracking ──
     const addressCount = counters && counters.totalAddresses > 0
