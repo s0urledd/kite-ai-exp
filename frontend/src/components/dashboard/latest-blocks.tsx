@@ -13,7 +13,7 @@ export function LatestBlocks({ blocks }: LatestBlocksProps) {
     <div className="bg-kite-surface rounded-[14px] border border-kite-border overflow-hidden">
       <div className="flex items-center justify-between px-5 py-3.5 border-b border-transparent">
         <span className="text-sm font-semibold text-kite-text">Latest Blocks</span>
-        <Link href="/blocks" className="text-xs text-kite-gold-dim font-medium hover:text-kite-gold transition-colors px-3 py-1 rounded-lg bg-white/[0.06] border border-kite-gold-dim/20 hover:border-kite-gold/40 hover:bg-white/[0.10]">
+        <Link href="/blocks" className="text-xs text-kite-gold font-medium hover:text-white transition-colors px-3 py-1.5 rounded-full bg-[#2a2a2e] hover:bg-[#3a3a3e] border-none">
           View all &rarr;
         </Link>
       </div>
