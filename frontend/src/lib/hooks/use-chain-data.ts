@@ -22,9 +22,7 @@ export interface ChainData {
   transactionsToday: number;
   gasUsedToday: number;
   totalBlocks: number;
-  // Blockscout real stats
   chainStats: ChainStats | null;
-  // Network activity counters
   totalContracts: number;
   newAddresses24h: number;
   newContracts24h: number;
@@ -52,7 +50,7 @@ const INITIAL: ChainData = {
   newContracts24h: 0,
 };
 
-// ── Stats microservice counters (single API call, all data) ──
+// ── Stats microservice counters ──
 interface StatsCounters {
   totalContracts: number;
   totalAddresses: number;
@@ -96,57 +94,6 @@ async function fetchStatsCounters(): Promise<StatsCounters | null> {
   }
 }
 
-/**
- * Calculate a rolling 24H transaction count.
- *
- * Blockscout's `transactions_today` only counts from midnight UTC — NOT a rolling 24H window.
- * If it's 3 AM UTC, that's only 3 hours of data, not 24H.
- *
- * This function combines:
- * 1. `transactions_today` (midnight UTC → now)
- * 2. Yesterday's TX count from /stats/charts/transactions (proportional to remaining hours)
- *
- * Result ≈ true rolling 24H TX count.
- */
-async function calculateRolling24hTx(todayFromStats: number): Promise<number> {
-  const now = new Date();
-  const hoursSinceMidnightUTC = now.getUTCHours() + now.getUTCMinutes() / 60;
-  const remainingHours = 24 - hoursSinceMidnightUTC;
-
-  // If we're very close to midnight, transactions_today is basically 24H already
-  if (remainingHours < 0.5) return todayFromStats;
-
-  try {
-    const chartData = await blockscout.getTransactionCharts();
-    const chart = chartData?.chart_data;
-    if (!Array.isArray(chart) || chart.length < 2) return todayFromStats;
-
-    // Get yesterday's total TX count (second-to-last entry, or last if today not in chart)
-    // Chart entries: [{date: "2026-03-14", tx_count: 500}, {date: "2026-03-15", tx_count: 200}]
-    const todayStr = now.toISOString().slice(0, 10);
-    let yesterdayTxCount = 0;
-
-    for (let i = chart.length - 1; i >= 0; i--) {
-      if (chart[i].date !== todayStr) {
-        yesterdayTxCount = chart[i].tx_count ?? chart[i].transaction_count ?? 0;
-        break;
-      }
-    }
-
-    if (yesterdayTxCount <= 0) return todayFromStats;
-
-    // Proportional share of yesterday's TX for the remaining hours
-    const yesterdayShare = Math.round(yesterdayTxCount * (remainingHours / 24));
-    return todayFromStats + yesterdayShare;
-  } catch {
-    return todayFromStats;
-  }
-}
-
-/**
- * Fetch the latest value from a stats-microservice line chart.
- * Returns the most recent day's value, or 0 on failure.
- */
 async function fetchLatestStatValue(endpoint: string): Promise<number> {
   try {
     const res = await fetch(`${STATS_API_URL}/api/v1/lines/${endpoint}`, {
@@ -156,7 +103,6 @@ async function fetchLatestStatValue(endpoint: string): Promise<number> {
     const data = await res.json();
     const chart = data?.chart;
     if (!Array.isArray(chart) || chart.length === 0) return 0;
-    // Last entry = most recent day
     const last = chart[chart.length - 1];
     return parseInt(last.value) || 0;
   } catch {
@@ -164,39 +110,125 @@ async function fetchLatestStatValue(endpoint: string): Promise<number> {
   }
 }
 
-// ── Persist 24H TX count across page reloads ──
-const TX24H_STORAGE_KEY = "kite_tx24h";
-const TX24H_TTL = 120_000; // 2 minutes
+// ════════════════════════════════════════════════════════════════
+// 24H TX Counter — exact, real-time, persistent across reloads
+// ════════════════════════════════════════════════════════════════
+//
+// How it works:
+//   1. First ever load → paginate Blockscout /blocks, sum tx_count
+//      for last 24H. Save {count, lastBlock, timestamp} to localStorage.
+//   2. F5 / page reload → read from localStorage. Only fetch NEW blocks
+//      since lastBlock and add their tx_count. Fast, no full recalc.
+//   3. Every 10 minutes → full recalc to correct any drift from the
+//      24H sliding window (old TXs falling off the back).
+//   4. New blocks arrive (10s poll) → add their tx_count immediately.
 
-function saveTx24h(value: number) {
+const TX24H_KEY = "kite_tx24h_v2";
+const FULL_RECALC_INTERVAL = 600_000; // 10 minutes
+
+interface Tx24hState {
+  count: number;
+  lastBlock: number;
+  calculatedAt: number;
+}
+
+function saveTx24hState(state: Tx24hState) {
   try {
-    sessionStorage.setItem(TX24H_STORAGE_KEY, JSON.stringify({ v: value, t: Date.now() }));
+    localStorage.setItem(TX24H_KEY, JSON.stringify(state));
   } catch {}
 }
 
-function loadTx24h(): number {
+function loadTx24hState(): Tx24hState | null {
   try {
-    const raw = sessionStorage.getItem(TX24H_STORAGE_KEY);
-    if (!raw) return 0;
-    const { v, t } = JSON.parse(raw);
-    // Only use if saved within last 2 minutes
-    if (Date.now() - t > TX24H_TTL) return 0;
-    return v || 0;
+    const raw = localStorage.getItem(TX24H_KEY);
+    if (!raw) return null;
+    const state = JSON.parse(raw) as Tx24hState;
+    // Valid if calculated within last 15 minutes
+    if (Date.now() - state.calculatedAt > 900_000) return null;
+    if (!state.count || !state.lastBlock) return null;
+    return state;
   } catch {
-    return 0;
+    return null;
   }
 }
+
+/**
+ * Full 24H TX count: paginate through Blockscout blocks from newest to oldest,
+ * summing tx_count until we pass the 24H boundary.
+ */
+async function fullCount24hTx(): Promise<{ count: number; newestBlock: number }> {
+  const cutoffSec = Math.floor(Date.now() / 1000) - 86400;
+  let total = 0;
+  let newestBlock = 0;
+  let params: Record<string, string> = { type: "block" };
+
+  for (let page = 0; page < 25; page++) {
+    const data = await blockscout.getBlocks(params);
+    const blocks = data.items || [];
+    if (blocks.length === 0) break;
+
+    for (const block of blocks) {
+      if (page === 0 && newestBlock === 0) newestBlock = block.height;
+      const blockTimeSec = new Date(block.timestamp).getTime() / 1000;
+      if (blockTimeSec < cutoffSec) {
+        return { count: total, newestBlock };
+      }
+      total += block.tx_count || 0;
+    }
+
+    if (!data.next_page_params) break;
+    params = Object.fromEntries(
+      Object.entries(data.next_page_params).map(([k, v]) => [k, String(v)])
+    );
+  }
+
+  return { count: total, newestBlock };
+}
+
+/**
+ * Incremental update: fetch only blocks newer than lastBlock,
+ * add their tx_count to existing count.
+ */
+async function incrementalCount(lastBlock: number, currentBlock: number): Promise<number> {
+  if (currentBlock <= lastBlock) return 0;
+
+  let added = 0;
+  let params: Record<string, string> = { type: "block" };
+
+  for (let page = 0; page < 5; page++) {
+    const data = await blockscout.getBlocks(params);
+    const blocks = data.items || [];
+    if (blocks.length === 0) break;
+
+    let reachedLastBlock = false;
+    for (const block of blocks) {
+      if (block.height <= lastBlock) {
+        reachedLastBlock = true;
+        break;
+      }
+      added += block.tx_count || 0;
+    }
+
+    if (reachedLastBlock) break;
+    if (!data.next_page_params) break;
+    params = Object.fromEntries(
+      Object.entries(data.next_page_params).map(([k, v]) => [k, String(v)])
+    );
+  }
+
+  return added;
+}
+
 
 export function useChainData(pollInterval = 10000) {
   const [data, setData] = useState<ChainData>(INITIAL);
   const addrs = useRef(new Set<string>());
-  // Track peak TPS over 24H — only goes up, resets after 24H
   const peakTpsRef = useRef({ value: 0, since: Date.now() });
-  // Track new TX since last update to keep 24H TX real-time between polls
-  const txTracker = useRef({ lastSeenBlock: 0, txDelta: 0, lastSourceValue: 0 });
 
-  // Cache slow-changing values — refresh every 60s
-  // Keep last good values so failed fetches don't wipe data
+  // 24H TX state — survives between polls, initialized from localStorage on mount
+  const tx24h = useRef<Tx24hState>({ count: 0, lastBlock: 0, calculatedAt: 0 });
+  const tx24hInitialized = useRef(false);
+
   const slowCache = useRef({
     totalContracts: 0,
     newAddresses24h: 0,
@@ -204,13 +236,10 @@ export function useChainData(pollInterval = 10000) {
     lastFetch: 0,
   });
 
-  // Cache last good Blockscout stats to survive intermittent failures
   const lastGoodStats = useRef<ChainStats | null>(null);
-  // Cache last good stats-microservice counters
   const lastGoodCounters = useRef<StatsCounters | null>(null);
 
   const load = useCallback(async () => {
-    // Fetch RPC data, Blockscout stats, and stats-microservice counters in parallel
     const [bnH, gpH, statsResult, countersResult] = await Promise.all([
       rpc<string>("eth_blockNumber"),
       rpc<string>("eth_gasPrice"),
@@ -220,14 +249,13 @@ export function useChainData(pollInterval = 10000) {
     const bn = hex(bnH);
     const gp = gwei(gpH);
 
-    // Use fresh data or fall back to last good values
     const stats = statsResult || lastGoodStats.current;
     if (statsResult) lastGoodStats.current = statsResult;
 
     const counters = countersResult || lastGoodCounters.current;
     if (countersResult) lastGoodCounters.current = countersResult;
 
-    // Fetch recent blocks for TPS, gas, active contracts, and display
+    // Recent blocks for display
     const RECENT_BLOCKS = 8;
     const promises: Promise<RpcBlock | null>[] = [];
     for (let i = 0; i < RECENT_BLOCKS; i++) {
@@ -255,9 +283,7 @@ export function useChainData(pollInterval = 10000) {
 
       txs.forEach((tx) => {
         addrs.current.add(tx.from);
-        if (tx.to) {
-          addrs.current.add(tx.to);
-        }
+        if (tx.to) addrs.current.add(tx.to);
         if (tx.to && tx.input?.length > 10) {
           if (!contractMap[tx.to]) contractMap[tx.to] = { address: tx.to, count: 0, users: new Set() };
           contractMap[tx.to].count++;
@@ -271,7 +297,6 @@ export function useChainData(pollInterval = 10000) {
       .slice(0, 10)
       .map((c) => ({ address: c.address, calls: c.count, callers: c.users.size }));
 
-    // Block time from Blockscout (most accurate), fallback to local sample
     const localAvgBt =
       bks.length >= 2
         ? (hex(bks[0].timestamp) - hex(bks[bks.length - 1].timestamp)) / (bks.length - 1)
@@ -279,14 +304,12 @@ export function useChainData(pollInterval = 10000) {
 
     const util = bks[0] ? (hex(bks[0].gasUsed) / hex(bks[0].gasLimit)) * 100 : 0;
 
-    // TPS: instantaneous rate from recent blocks
     const totalTimeSpan =
       bks.length >= 2
         ? hex(bks[0].timestamp) - hex(bks[bks.length - 1].timestamp)
         : 0;
     const instantTps = totalTimeSpan > 0 ? tot / totalTimeSpan : 0;
 
-    // Peak TPS: track highest instantaneous TPS seen, reset every 24H
     const now24h = Date.now();
     if (now24h - peakTpsRef.current.since > 86400_000) {
       peakTpsRef.current = { value: instantTps, since: now24h };
@@ -294,7 +317,7 @@ export function useChainData(pollInterval = 10000) {
       peakTpsRef.current.value = instantTps;
     }
 
-    // Total TXN: prefer stats-microservice > Blockscout > estimate
+    // Total TXN
     let totalTx: number;
     if (counters && counters.totalTxns > 0) {
       totalTx = counters.totalTxns;
@@ -305,14 +328,10 @@ export function useChainData(pollInterval = 10000) {
       totalTx = Math.round(avgTxPerBlock * bn);
     }
 
-    // ── Slow-changing counters: refresh every 60s ──
-    // Only needed for newAccounts chart (counters endpoint doesn't have newAddresses24h)
+    // Slow counters (every 60s)
     const now = Date.now();
     if (now - slowCache.current.lastFetch > 60000) {
-      // Stats-microservice counters already have totalContracts and lastNewContracts
-      // We only need newAccounts chart for new addresses count
       const newAccounts = await fetchLatestStatValue("newAccounts");
-
       slowCache.current = {
         newAddresses24h: newAccounts > 0 ? newAccounts : slowCache.current.newAddresses24h,
         newContracts24h: counters ? counters.lastNewContracts : slowCache.current.newContracts24h,
@@ -321,54 +340,66 @@ export function useChainData(pollInterval = 10000) {
       };
     }
 
-    // ── 24H Transactions (Rolling 24H window) ──
-    // Priority:
-    //   1. Stats-microservice newTxns24h (true rolling 24H if available)
-    //   2. Rolling calc: Blockscout transactions_today + proportional yesterday from chart data
-    //   3. Raw Blockscout transactions_today (midnight UTC, worst case)
-    const microserviceTx24h = counters ? counters.newTxns24h : 0;
-    const blockscoutTx24h = stats?.transactions_today ? parseInt(stats.transactions_today) : 0;
+    // ══════════════════════════════════════════════════
+    // 24H TX — exact, persistent, incremental
+    // ══════════════════════════════════════════════════
+    const needsFullRecalc = now - tx24h.current.calculatedAt > FULL_RECALC_INTERVAL;
 
-    let baseTx24h: number;
-    if (microserviceTx24h > 0) {
-      // Stats microservice has true rolling 24H — use it directly
-      baseTx24h = microserviceTx24h;
-    } else if (blockscoutTx24h > 0) {
-      // Calculate rolling 24H from chart data + today's count
-      baseTx24h = await calculateRolling24hTx(blockscoutTx24h);
-    } else {
-      baseTx24h = 0;
-    }
+    if (!tx24hInitialized.current) {
+      // First poll after mount: try localStorage
+      tx24hInitialized.current = true;
+      const saved = loadTx24hState();
 
-    // Track TX delta for real-time updates between API polls
-    if (baseTx24h !== txTracker.current.lastSourceValue && baseTx24h > 0) {
-      txTracker.current = { lastSeenBlock: bn, txDelta: 0, lastSourceValue: baseTx24h };
-    } else if (bn > txTracker.current.lastSeenBlock && bks.length > 0) {
+      if (saved && saved.lastBlock > 0) {
+        // Have saved state — just add new blocks since last visit
+        const added = await incrementalCount(saved.lastBlock, bn);
+        tx24h.current = {
+          count: saved.count + added,
+          lastBlock: bn,
+          calculatedAt: saved.calculatedAt,
+        };
+        saveTx24hState(tx24h.current);
+      } else {
+        // No saved state — full calculation
+        const result = await fullCount24hTx();
+        tx24h.current = {
+          count: result.count,
+          lastBlock: result.newestBlock || bn,
+          calculatedAt: now,
+        };
+        saveTx24hState(tx24h.current);
+      }
+    } else if (needsFullRecalc) {
+      // Periodic full recalc to correct 24H sliding window drift
+      const result = await fullCount24hTx();
+      tx24h.current = {
+        count: result.count,
+        lastBlock: result.newestBlock || bn,
+        calculatedAt: now,
+      };
+      saveTx24hState(tx24h.current);
+    } else if (bn > tx24h.current.lastBlock) {
+      // Normal poll: add TXs from new blocks via RPC data we already have
       for (const b of bks) {
         const blockNum = hex(b.number);
-        if (blockNum > txTracker.current.lastSeenBlock) {
-          const txCount = Array.isArray(b.transactions) ? b.transactions.length : 0;
-          txTracker.current.txDelta += txCount;
+        if (blockNum > tx24h.current.lastBlock) {
+          tx24h.current.count += Array.isArray(b.transactions) ? b.transactions.length : 0;
         }
       }
-      txTracker.current.lastSeenBlock = bn;
+      tx24h.current.lastBlock = bn;
+      saveTx24hState(tx24h.current);
     }
 
-    const computedTx24h = (baseTx24h > 0 ? baseTx24h : 0) + txTracker.current.txDelta;
-    // Use max of computed value and last saved value (survives F5)
-    const savedTx24h = loadTx24h();
-    const transactionsToday = Math.max(computedTx24h, savedTx24h);
-    // Persist for next page load
-    if (transactionsToday > 0) saveTx24h(transactionsToday);
+    const transactionsToday = tx24h.current.count;
 
-    // ── Address count: counters > Blockscout stats > local tracking ──
+    // Address count
     const addressCount = counters && counters.totalAddresses > 0
       ? counters.totalAddresses
       : stats
         ? parseInt(stats.total_addresses || "0")
         : addrs.current.size;
 
-    // ── Avg TPS (based on rolling 24H TX count / 86400 seconds) ──
+    // Avg TPS (24H)
     const avgTps = transactionsToday > 0 ? transactionsToday / 86400 : instantTps;
 
     setData({
