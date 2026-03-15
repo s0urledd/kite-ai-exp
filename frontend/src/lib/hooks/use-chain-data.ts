@@ -227,7 +227,7 @@ async function incrementalCount(lastBlock: number, currentBlock: number): Promis
 export function useChainData(pollInterval = 10000) {
   const [data, setData] = useState<ChainData>(INITIAL);
   const addrs = useRef(new Set<string>());
-  const peakTpsRef = useRef(() => {
+  const peakTpsRef = useRef((() => {
     try {
       const raw = localStorage.getItem("kite_peak_tps");
       if (raw) {
@@ -236,7 +236,7 @@ export function useChainData(pollInterval = 10000) {
       }
     } catch {}
     return { value: 0, since: Date.now() };
-  })();
+  })());
 
   // 24H TX state — survives between polls, initialized from localStorage on mount
   const tx24h = useRef<Tx24hState>({ count: 0, lastBlock: 0, calculatedAt: 0 });
