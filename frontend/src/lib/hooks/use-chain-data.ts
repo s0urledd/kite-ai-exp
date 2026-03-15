@@ -433,7 +433,7 @@ export function useChainData(pollInterval = 10000) {
           : (localAvgBt > 0 ? localAvgBt : 2),
       utilization: stats ? stats.network_utilization_percentage : util,
       tps: avgTps,
-      peakTps: Math.max(peakTpsRef.current.value, avgTps),
+      peakTps: peakTpsRef.current.value,
       contracts,
       addressCount,
       transactionsToday,
