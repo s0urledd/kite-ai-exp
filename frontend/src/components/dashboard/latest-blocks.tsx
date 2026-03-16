@@ -55,7 +55,7 @@ export function LatestBlocks({ blocks }: LatestBlocksProps) {
                 <div className="flex items-center gap-1.5 text-[11px] text-white">
                   <span>{tc} txns</span>
                   <span className="text-kite-text-muted/50">&middot;</span>
-                  <span>{pct}% gas</span>
+                  <span>{pct}% utilized</span>
                 </div>
               </Link>
 
