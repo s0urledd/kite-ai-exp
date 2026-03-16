@@ -83,8 +83,15 @@ export function StatStrip({ data }: StatStripProps) {
               ? data.transactionsToday.toLocaleString()
               : "\u2014",
         },
-        { label: "Avg TPS (24H)", value: data.tps < 1 ? data.tps.toFixed(3) : data.tps.toFixed(2) },
-        { label: "Peak TPS (24H)", align: "right" as const, value: data.peakTps < 1 ? data.peakTps.toFixed(3) : data.peakTps.toFixed(2) },
+        {
+          label: "Total Addresses",
+          value: <AnimatedNumber value={data.addressCount} />,
+        },
+        {
+          label: "24H New Addresses",
+          align: "right" as const,
+          value: data.newAddresses24h > 0 ? data.newAddresses24h.toLocaleString() : "\u2014",
+        },
       ],
     },
     // ── Card 2: Block & Gas ──
@@ -174,13 +181,13 @@ export function StatStrip({ data }: StatStripProps) {
       ),
       metrics: [
         {
-          label: "Total Addresses",
-          value: <AnimatedNumber value={data.addressCount} />,
+          label: "Avg TPS (24H)",
+          value: data.tps < 1 ? data.tps.toFixed(3) : data.tps.toFixed(2),
         },
         {
-          label: "24H New Addresses",
+          label: "Peak TPS (24H)",
           align: "right" as const,
-          value: data.newAddresses24h > 0 ? data.newAddresses24h.toLocaleString() : "\u2014",
+          value: data.peakTps < 1 ? data.peakTps.toFixed(3) : data.peakTps.toFixed(2),
         },
         {
           label: "Total Contracts",
