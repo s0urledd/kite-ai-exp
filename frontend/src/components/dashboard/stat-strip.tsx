@@ -61,9 +61,9 @@ export function StatStrip({ data }: StatStripProps) {
       : 0;
 
   const cards: StatCard[] = [
-    // ── Card 1: Chain Pulse ──
+    // ── Card 1: Chain Activity ──
     {
-      title: "Chain Pulse",
+      title: "Chain Activity",
       accentHex: GOLD,
       icon: (
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
