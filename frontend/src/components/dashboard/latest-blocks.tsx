@@ -52,7 +52,9 @@ export function LatestBlocks({ blocks }: LatestBlocksProps) {
                   <span>{tc} txns</span>
                   <span className="text-kite-text-muted/50">&middot;</span>
                   <span>{pct}% gas</span>
-                  <span className="text-kite-text-muted/50">&middot;</span>
+                </div>
+                <div className="flex items-center gap-1 text-[11px] mt-0.5">
+                  <span className="text-kite-text-muted">Proposer</span>
                   <span className="font-mono text-kite-text-secondary">{shortenHash(b.miner, 4)}</span>
                 </div>
               </div>

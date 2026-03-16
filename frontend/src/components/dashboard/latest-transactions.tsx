@@ -94,7 +94,7 @@ export function LatestTransactions({ blocks }: LatestTransactionsProps) {
               {/* Fee & time */}
               <div className="text-right flex-shrink-0 ml-2">
                 <div className="text-[13px] font-semibold font-mono text-kite-text whitespace-nowrap">
-                  <span className="text-kite-text-muted text-[11px] font-normal">Fee </span>{fee.toFixed(5)} <span className="text-kite-text-secondary text-[11px] font-normal">KITE</span>
+                  <span className="text-white text-[11px] font-normal">Fee </span>{fee.toFixed(5)} <span className="text-kite-text-secondary text-[11px] font-normal">KITE</span>
                 </div>
                 <div className="text-[11px] text-white mt-0.5">
                   {timeAgo(tx._ts.toString())} ago

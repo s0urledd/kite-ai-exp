@@ -206,14 +206,6 @@ export function StatStrip({ data }: StatStripProps) {
               boxShadow: `0 0 0 1px ${GOLD}10`,
             }}
           >
-            {/* Top gold gradient line */}
-            <div
-              className="absolute top-0 left-0 right-0 h-[2px]"
-              style={{
-                background: `linear-gradient(90deg, ${GOLD}00 0%, ${GOLD} 50%, ${GOLD}00 100%)`,
-              }}
-            />
-
             <div className="p-5 pt-5">
               {/* Header */}
               <div className="flex items-center gap-2.5 mb-2.5">
