@@ -45,8 +45,13 @@ export function LatestBlocks({ blocks }: LatestBlocksProps) {
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 mb-0.5">
                   <span className="text-[13px] font-mono font-bold text-kite-gold group-hover:text-kite-gold-light transition-colors">
-                    {n.toLocaleString()}
+                    #{n.toLocaleString()}
                   </span>
+                  {idx === 0 && (
+                    <span className="text-[9px] font-semibold text-kite-gold bg-kite-gold-faint px-1.5 py-px rounded">
+                      Latest
+                    </span>
+                  )}
                 </div>
                 <div className="flex items-center gap-1.5 text-[11px] text-white">
                   <span>{tc} txns</span>
