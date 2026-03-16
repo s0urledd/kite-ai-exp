@@ -30,9 +30,10 @@ export function LatestTransactions({ blocks }: LatestTransactionsProps) {
       <div className="max-h-[420px] overflow-y-auto">
         {txs.map((tx, idx) => {
           const isContract = tx.input?.length > 10;
-          const gasLimit = hex(tx.gas);
           const gasPrice = hex(tx.gasPrice);
-          const fee = (gasLimit * gasPrice) / 1e18;
+          // Use 21000 for simple transfers, gasLimit for contract calls
+          const gasEstimate = isContract ? hex(tx.gas) : 21000;
+          const fee = (gasEstimate * gasPrice) / 1e18;
 
           return (
             <div
