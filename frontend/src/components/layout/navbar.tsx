@@ -2,12 +2,28 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useState, useRef, useEffect } from "react";
 import { KiteLogo } from "@/components/common/kite-logo";
 import { useTheme } from "@/lib/hooks/use-theme";
 
-const NAV_ITEMS = [
+interface NavItem {
+  href: string;
+  label: string;
+  match: string[];
+  children?: { href: string; label: string }[];
+}
+
+const NAV_ITEMS: NavItem[] = [
   { href: "/", label: "Home", match: ["/"] },
-  { href: "/blocks", label: "Blockchain", match: ["/blocks", "/block/", "/txs", "/tx/"] },
+  {
+    href: "/blocks",
+    label: "Blockchain",
+    match: ["/blocks", "/block/", "/txs", "/tx/"],
+    children: [
+      { href: "/blocks", label: "Blocks" },
+      { href: "/txs", label: "Transactions" },
+    ],
+  },
   { href: "/tokens", label: "Tokens", match: ["/tokens", "/token/"] },
   { href: "/contracts", label: "Contracts", match: ["/contracts"] },
   { href: "/stats", label: "Charts & Stats", match: ["/stats"] },
@@ -17,6 +33,18 @@ const NAV_ITEMS = [
 export function Navbar() {
   const pathname = usePathname();
   const { theme, toggle } = useTheme();
+  const [openDropdown, setOpenDropdown] = useState<string | null>(null);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+        setOpenDropdown(null);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
 
   return (
     <nav className="sticky top-0 z-50 bg-kite-bg/95 backdrop-blur-md border-b border-kite-border">
@@ -25,9 +53,63 @@ export function Navbar() {
         <div className="flex items-center gap-3">
           <KiteLogo size={26} />
 
-          <div className="flex gap-0.5 ml-3">
+          <div className="flex gap-0.5 ml-3" ref={dropdownRef}>
             {NAV_ITEMS.map((item) => {
               const active = item.match.some((m) => m === "/" ? pathname === "/" : pathname.startsWith(m));
+
+              if (item.children) {
+                const isOpen = openDropdown === item.label;
+                return (
+                  <div key={item.href} className="relative">
+                    <button
+                      onClick={() => setOpenDropdown(isOpen ? null : item.label)}
+                      className={`px-3 py-1.5 rounded-lg text-[13px] font-medium transition-colors flex items-center gap-1 ${
+                        active
+                          ? "text-kite-gold bg-kite-gold-faint"
+                          : "text-kite-text-secondary hover:text-kite-gold hover:bg-kite-gold-faint"
+                      }`}
+                    >
+                      {item.label}
+                      <svg
+                        width="10"
+                        height="10"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2.5"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        className={`transition-transform ${isOpen ? "rotate-180" : ""}`}
+                      >
+                        <polyline points="6 9 12 15 18 9" />
+                      </svg>
+                    </button>
+
+                    {isOpen && (
+                      <div className="absolute top-full left-0 mt-1.5 min-w-[160px] bg-kite-surface rounded-lg border border-white/[0.06] shadow-xl shadow-black/40 py-1 overflow-hidden">
+                        {item.children.map((child) => {
+                          const childActive = pathname.startsWith(child.href);
+                          return (
+                            <Link
+                              key={child.href}
+                              href={child.href}
+                              onClick={() => setOpenDropdown(null)}
+                              className={`block px-4 py-2 text-[13px] font-medium transition-colors ${
+                                childActive
+                                  ? "text-kite-gold bg-kite-gold-faint"
+                                  : "text-kite-text-secondary hover:text-kite-gold hover:bg-kite-gold-faint"
+                              }`}
+                            >
+                              {child.label}
+                            </Link>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                );
+              }
+
               return (
                 <Link
                   key={item.href}
