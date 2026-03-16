@@ -42,7 +42,7 @@ export function LatestBlocks({ blocks }: LatestBlocksProps) {
               </div>
 
               {/* Block info */}
-              <div className="min-w-0">
+              <div className="min-w-0 w-[140px] flex-shrink-0">
                 <div className="flex items-center gap-2 mb-0.5">
                   <span className="text-[13px] font-mono font-bold text-kite-gold group-hover:text-kite-gold-light transition-colors">
                     #{n.toLocaleString()}
@@ -61,11 +61,8 @@ export function LatestBlocks({ blocks }: LatestBlocksProps) {
               </div>
 
               {/* Proposer - center */}
-              <div className="flex-1 text-center">
-                <div className="flex items-center justify-center gap-1 text-[11px]">
-                  <span className="text-kite-text-muted">Proposer</span>
-                  <span className="font-mono text-kite-text-secondary">{shortenHash(b.miner, 4)}</span>
-                </div>
+              <div className="flex-1 flex items-center justify-center">
+                <span className="text-[11px] text-white">Proposer: <span className="font-mono">{shortenHash(b.miner, 4)}</span></span>
               </div>
 
               {/* Time */}

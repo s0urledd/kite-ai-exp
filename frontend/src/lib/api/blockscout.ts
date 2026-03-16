@@ -111,6 +111,10 @@ class BlockscoutClient {
   }
 
   // --- Addresses ---
+  async getAddresses(params?: Record<string, string>): Promise<PaginatedResponse<Address>> {
+    return this.fetch("/addresses", params);
+  }
+
   async getAddress(hash: string): Promise<Address> {
     return this.fetch(`/addresses/${hash}`);
   }

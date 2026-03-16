@@ -18,10 +18,11 @@ const NAV_ITEMS: NavItem[] = [
   {
     href: "/blocks",
     label: "Blockchain",
-    match: ["/blocks", "/block/", "/txs", "/tx/"],
+    match: ["/blocks", "/block/", "/txs", "/tx/", "/top-accounts"],
     children: [
       { href: "/blocks", label: "Blocks" },
       { href: "/txs", label: "Transactions" },
+      { href: "/top-accounts", label: "Top Accounts" },
     ],
   },
   { href: "/tokens", label: "Tokens", match: ["/tokens", "/token/"] },

@@ -84,13 +84,19 @@ export function StatStrip({ data }: StatStripProps) {
               : "\u2014",
         },
         {
-          label: "Total Addresses",
-          value: <AnimatedNumber value={data.addressCount} />,
+          label: "Network Util.",
+          value: data.utilization > 0 ? `${data.utilization.toFixed(1)}%` : "\u2014",
         },
         {
-          label: "24H New Addresses",
+          label: "Gas Used (24H)",
           align: "right" as const,
-          value: data.newAddresses24h > 0 ? data.newAddresses24h.toLocaleString() : "\u2014",
+          value: data.gasUsedToday > 0
+            ? data.gasUsedToday >= 1e9
+              ? `${(data.gasUsedToday / 1e9).toFixed(2)}B`
+              : data.gasUsedToday >= 1e6
+                ? `${(data.gasUsedToday / 1e6).toFixed(2)}M`
+                : data.gasUsedToday.toLocaleString()
+            : "\u2014",
         },
       ],
     },
@@ -181,19 +187,13 @@ export function StatStrip({ data }: StatStripProps) {
       ),
       metrics: [
         {
-          label: "Network Util.",
-          value: data.utilization > 0 ? `${data.utilization.toFixed(1)}%` : "\u2014",
+          label: "Total Addresses",
+          value: <AnimatedNumber value={data.addressCount} />,
         },
         {
-          label: "Gas Used (24H)",
+          label: "24H New Addresses",
           align: "right" as const,
-          value: data.gasUsedToday > 0
-            ? data.gasUsedToday >= 1e9
-              ? `${(data.gasUsedToday / 1e9).toFixed(2)}B`
-              : data.gasUsedToday >= 1e6
-                ? `${(data.gasUsedToday / 1e6).toFixed(2)}M`
-                : data.gasUsedToday.toLocaleString()
-            : "\u2014",
+          value: data.newAddresses24h > 0 ? data.newAddresses24h.toLocaleString() : "\u2014",
         },
         {
           label: "Total Contracts",
