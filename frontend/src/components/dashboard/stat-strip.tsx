@@ -181,13 +181,19 @@ export function StatStrip({ data }: StatStripProps) {
       ),
       metrics: [
         {
-          label: "Avg TPS (24H)",
-          value: data.tps < 1 ? data.tps.toFixed(3) : data.tps.toFixed(2),
+          label: "Network Util.",
+          value: data.utilization > 0 ? `${data.utilization.toFixed(1)}%` : "\u2014",
         },
         {
-          label: "Peak TPS (24H)",
+          label: "Gas Used (24H)",
           align: "right" as const,
-          value: data.peakTps < 1 ? data.peakTps.toFixed(3) : data.peakTps.toFixed(2),
+          value: data.gasUsedToday > 0
+            ? data.gasUsedToday >= 1e9
+              ? `${(data.gasUsedToday / 1e9).toFixed(2)}B`
+              : data.gasUsedToday >= 1e6
+                ? `${(data.gasUsedToday / 1e6).toFixed(2)}M`
+                : data.gasUsedToday.toLocaleString()
+            : "\u2014",
         },
         {
           label: "Total Contracts",
