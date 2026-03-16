@@ -30,10 +30,9 @@ export function LatestTransactions({ blocks }: LatestTransactionsProps) {
       <div className="max-h-[420px] overflow-y-auto">
         {txs.map((tx, idx) => {
           const isContract = tx.input?.length > 10;
+          const gasLimit = hex(tx.gas);
           const gasPrice = hex(tx.gasPrice);
-          // Use 21000 for simple transfers, gasLimit for contract calls
-          const gasEstimate = isContract ? hex(tx.gas) : 21000;
-          const fee = (gasEstimate * gasPrice) / 1e18;
+          const fee = (gasLimit * gasPrice) / 1e18;
 
           return (
             <div
@@ -94,7 +93,7 @@ export function LatestTransactions({ blocks }: LatestTransactionsProps) {
 
               {/* Fee & time */}
               <div className="text-right flex-shrink-0 ml-2">
-                <div className="text-[13px] font-semibold font-mono text-kite-text whitespace-nowrap">
+                <div className="text-[11px] font-medium font-mono text-kite-text whitespace-nowrap">
                   <span className="text-white text-[11px] font-normal">Fee </span>{fee.toFixed(5)} <span className="text-kite-text-secondary text-[11px] font-normal">KITE</span>
                 </div>
                 <div className="text-[11px] text-white mt-0.5">
