@@ -59,10 +59,10 @@ export function LatestBlocks({ blocks }: LatestBlocksProps) {
                 </div>
               </Link>
 
-              {/* Proposer - center */}
-              <div className="flex-1 flex items-center justify-center">
+              {/* Proposer */}
+              <div className="flex-1 flex items-center min-w-0">
                 <span className="text-[11px] text-kite-text-muted">Proposer:&nbsp;</span>
-                <Link href={`/address/${b.miner}`} className="text-[11px] font-mono text-kite-text-muted hover:text-kite-gold transition-colors">
+                <Link href={`/address/${b.miner}`} className="text-[11px] font-mono text-white hover:text-kite-gold transition-colors">
                   {shortenHash(b.miner, 4)}
                 </Link>
               </div>
