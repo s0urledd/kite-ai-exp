@@ -28,7 +28,7 @@ export default function DashboardPage() {
         {/* Latest Blocks & Transactions */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-3.5">
           <LatestBlocks blocks={data.blocks} />
-          <LatestTransactions blocks={data.blocks} />
+          <LatestTransactions />
         </div>
 
         {/* Charts Row */}

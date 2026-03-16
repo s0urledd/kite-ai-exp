@@ -1,22 +1,26 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import Link from "next/link";
-import { hex, type RpcBlock, type RpcTransaction } from "@/lib/api/rpc";
-import { shortenHash, timeAgo } from "@/lib/utils/format";
+import { blockscout } from "@/lib/api/blockscout";
+import type { Transaction } from "@/lib/types/api";
+import { shortenHash, timeAgo, weiToKite } from "@/lib/utils/format";
 
-interface LatestTransactionsProps {
-  blocks: RpcBlock[];
-}
+export function LatestTransactions() {
+  const [txs, setTxs] = useState<Transaction[]>([]);
 
-export function LatestTransactions({ blocks }: LatestTransactionsProps) {
-  const txs = blocks
-    .flatMap((b) => {
-      const ts = hex(b.timestamp);
-      return ((b.transactions || []) as RpcTransaction[])
-        .slice(0, 2)
-        .map((tx) => ({ ...tx, _ts: ts }));
-    })
-    .slice(0, 8);
+  useEffect(() => {
+    let mounted = true;
+    const load = async () => {
+      try {
+        const list = await blockscout.getLatestTransactions();
+        if (mounted) setTxs(list.slice(0, 8));
+      } catch {}
+    };
+    load();
+    const iv = setInterval(load, 10000);
+    return () => { mounted = false; clearInterval(iv); };
+  }, []);
 
   return (
     <div className="bg-kite-surface rounded-[14px] border border-kite-border overflow-hidden">
@@ -29,10 +33,8 @@ export function LatestTransactions({ blocks }: LatestTransactionsProps) {
 
       <div className="max-h-[420px] overflow-y-auto">
         {txs.map((tx, idx) => {
-          const isContract = tx.input?.length > 10;
-          const gasLimit = hex(tx.gas);
-          const gasPrice = hex(tx.gasPrice);
-          const fee = (gasLimit * gasPrice) / 1e18;
+          const isContract = tx.raw_input?.length > 10;
+          const fee = weiToKite(tx.fee?.value || "0", 5);
 
           return (
             <div
@@ -73,20 +75,20 @@ export function LatestTransactions({ blocks }: LatestTransactionsProps) {
                 <div className="flex items-center gap-1 text-[11px]">
                   <span className="text-kite-text-muted">From</span>
                   <Link
-                    href={`/address/${tx.from}`}
+                    href={`/address/${tx.from?.hash || ""}`}
                     className="font-mono text-kite-text-secondary hover:text-kite-gold transition-colors"
                   >
-                    {shortenHash(tx.from, 4)}
+                    {shortenHash(tx.from?.hash || "", 4)}
                   </Link>
                   <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" className="flex-shrink-0 text-kite-text-muted">
                     <path d="M5 12h14M12 5l7 7-7 7"/>
                   </svg>
                   <span className="text-kite-text-muted">To</span>
                   <Link
-                    href={`/address/${tx.to || ""}`}
+                    href={`/address/${tx.to?.hash || ""}`}
                     className="font-mono text-kite-text-secondary hover:text-kite-gold transition-colors"
                   >
-                    {shortenHash(tx.to || "", 4)}
+                    {shortenHash(tx.to?.hash || "", 4)}
                   </Link>
                 </div>
               </div>
@@ -94,10 +96,10 @@ export function LatestTransactions({ blocks }: LatestTransactionsProps) {
               {/* Fee & time */}
               <div className="text-right flex-shrink-0 ml-2">
                 <div className="text-[11px] font-medium font-mono text-kite-text whitespace-nowrap">
-                  <span className="text-white text-[11px] font-normal">Fee </span>{fee.toFixed(5)} <span className="text-kite-text-secondary text-[11px] font-normal">KITE</span>
+                  <span className="text-white text-[11px] font-normal">Fee </span>{fee} <span className="text-kite-text-secondary text-[11px] font-normal">KITE</span>
                 </div>
                 <div className="text-[11px] text-white mt-0.5">
-                  {timeAgo(tx._ts.toString())} ago
+                  {timeAgo(tx.timestamp)} ago
                 </div>
               </div>
             </div>
